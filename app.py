@@ -4,6 +4,10 @@ import boto3
 import uuid
 
 from helper_func import formatDynamoResponse, getPostRequest
+import traceback
+#import copy
+from datetime import datetime
+import pytz
 
 from flask import Flask, jsonify, request
 app = Flask(__name__)
@@ -28,18 +32,22 @@ def landing():
 
 @app.route("/locations/<string:regionName>")
 def get_locations_for_region(regionName):
-    response = client.query(
-        TableName=locations_table,
-        KeyConditionExpression='#r = :regionName',
-        ExpressionAttributeValues={
-            ':regionName': {
-                'S': regionName,
+    try:
+        response = client.query(
+            TableName=locations_table,
+            KeyConditionExpression='#r = :regionName',
+            ExpressionAttributeValues={
+                ':regionName': {
+                    'S': regionName,
+                },
             },
-        },
-        ExpressionAttributeNames={
-            '#r': 'region'
-        },
-    )
+            ExpressionAttributeNames={
+                '#r': 'region'
+            },
+        )
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Error with getting data'}), 500
 
     db_entries = response.get('Items')
     
@@ -55,15 +63,19 @@ def get_locations_for_region(regionName):
 @app.route("/locations/<path:regionWithLocationId>/future")
 def get_future_bookings(regionWithLocationId):
     locationId = str(regionWithLocationId).split('/', 1)[1]
-    response = client.query(
-        TableName=future_bookings_table,
-        KeyConditionExpression='locationId = :location_id',
-        ExpressionAttributeValues={
-            ':location_id': {
-                'S': locationId,
+    try:
+        response = client.query(
+            TableName=future_bookings_table,
+            KeyConditionExpression='locationId = :location_id',
+            ExpressionAttributeValues={
+                ':location_id': {
+                    'S': locationId,
+                },
             },
-        },
-    )
+        )  
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Error with getting data'}), 500
 
     db_entries = response.get('Items')
     
@@ -78,13 +90,18 @@ def get_future_bookings(regionWithLocationId):
 
 @app.route("/locations/<string:regionName>/<string:locationId>")
 def get_location(regionName, locationId):
-    resp = client.get_item(
-        TableName=locations_table,
-        Key={
-            'region': { 'S': regionName},
-            'locationId': { 'S': locationId }
-        }
-    )
+    try:
+        resp = client.get_item(
+            TableName=locations_table,
+            Key={
+                'region': { 'S': regionName},
+                'locationId': { 'S': locationId }
+            }
+        )
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Error with getting data'}), 500
+    
     item = resp.get('Item')
     if not item:
         return jsonify({'error': 'Location does not exist'}), 404
@@ -95,7 +112,11 @@ def get_location(regionName, locationId):
 
 @app.route("/locations", methods=["GET"])
 def get_locations():
-    response = client.scan(TableName=locations_table)
+    try:
+        response = client.scan(TableName=locations_table)
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Error with getting data'}), 500
 
     db_entries = response.get('Items')
     
@@ -114,27 +135,32 @@ def create_location():
     
     data_to_send['locationId'] = {'S': uuid.uuid4().hex }
 
-    if not data_to_send['locationId']:
-        return jsonify({'error': 'Please provide locationId'}), 400
-
-    response = client.put_item(
-        TableName=locations_table,
-        Item=data_to_send
-    )
+    try:
+        response = client.put_item(
+            TableName=locations_table,
+            Item=data_to_send
+        )
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Error with POST request'}), 500
 
     return jsonify(data_to_send)
 
 @app.route("/users/<string:username>", methods=["GET"])
 def get_user_bookings(username):
-    response = client.query(
-        TableName=user_bookings_table,
-        KeyConditionExpression='username = :userName',
-        ExpressionAttributeValues={
-            ':userName': {
-                'S': username,
+    try:
+        response = client.query(
+            TableName=user_bookings_table,
+            KeyConditionExpression='username = :userName',
+            ExpressionAttributeValues={
+                ':userName': {
+                    'S': username,
+                },
             },
-        },
-    )
+        )
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Error with getting data'}), 500
 
     db_entries = response.get('Items')
     
@@ -149,26 +175,49 @@ def get_user_bookings(username):
 
 @app.route("/users/<string:username>", methods=["POST"])
 def add_booking(username):
-    attrib_list = [{'username': 'S'}, {'dateTimeSlot': 'S'}, {'locationId': 'S'}]
+    attrib_list = [{'dateTimeSlot': 'S'}, {'locationId': 'S'}]
     booking_info = getPostRequest(request, attrib_list)
+    booking_info['username'] = { 'S': username}
 
-    response = client.put_item(
-        TableName=user_bookings_table,
-        Item=booking_info
-    )
+    sg_timezone = pytz.timezone('Asia/Singapore')
+    sg_time = datetime.now(sg_timezone)
+    print(sg_time)
 
-    del booking_info['username']
+    try:
+        dynamodb = boto3.resource('dynamodb')
 
-    update_location_response = client.update_item(
-        TableName=future_bookings_table,
-        Key=booking_info,
-        UpdateExpression="SET bookings = bookings + :val",
-        ExpressionAttributeValues={
-            ':val': {
-                'N': "1",
-            }
-        },
-        ReturnValues="UPDATED_NEW"
-    )
+        future_bookings_table_ref = dynamodb.Table(future_bookings_table)
+
+        #location_booking_info = copy.deepcopy(booking_info)
+
+        #del location_booking_info['username']
+
+        location_booking_info = {'locationId': request.json.get('locationId'), 'dateTimeSlot': request.json.get('dateTimeSlot')}
+
+        maxOccupancy_response = future_bookings_table_ref.get_item(
+            Key=location_booking_info,
+            ProjectionExpression='maxOccupancy',
+        )
+
+        maxOccupancy = maxOccupancy_response['Item']['maxOccupancy']
+
+        update_location_response = future_bookings_table_ref.update_item(
+            Key=location_booking_info,
+            UpdateExpression="SET bookings = bookings + :val",
+            ConditionExpression="bookings < :max",
+            ExpressionAttributeValues={
+                ':val': 1,
+                ':max': maxOccupancy
+            },
+            ReturnValues="UPDATED_NEW"
+        )
+
+        response = client.put_item(
+            TableName=user_bookings_table,
+            Item=booking_info
+        )
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Error with POST request'}), 500
 
     return jsonify(booking_info)

@@ -29,4 +29,4 @@ https://wrm7pj3sz1.execute-api.us-east-1.amazonaws.com/staging
 - POST: Add a new booking for the user at the specified location
   E.g.
 
-  `{ "username": "exampleuser", "locationId": "f70612ac60bd4503a31fd070046b607b", "dateTimeSlot": "04-06-2020 0900"//datetime format to be confirmed }`
+  `{ "username": "exampleuser", "locationId": "f70612ac60bd4503a31fd070046b607b", "dateTimeSlot": "2020-06-04 0900" }`
