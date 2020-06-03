@@ -1,3 +1,4 @@
+from flask import request
 
 def formatDynamoResponse(entry):
     return_dict = {}

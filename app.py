@@ -83,8 +83,8 @@ def get_future_bookings(regionWithLocationId):
     return_response = { 'items':return_list }
     for entry in db_entries:
         temp_dict = formatDynamoResponse(entry)
-        
-        return_list.append(temp_dict)
+        if temp_dict['isFuture']:
+            return_list.append(temp_dict)
     
     return jsonify(return_response)
 
@@ -129,7 +129,7 @@ def get_locations():
     
     return jsonify(return_response)
 
-@app.route("/locations", methods=["POST"])
+""" @app.route("/locations", methods=["POST"])
 def create_location():
     data_to_send = getPostRequest(request, attrib_list_ex_locationId)
     
@@ -144,7 +144,7 @@ def create_location():
         traceback.print_exc()
         return jsonify({'error': 'Error with POST request'}), 500
 
-    return jsonify(data_to_send)
+    return jsonify(data_to_send) """
 
 @app.route("/users/<string:username>", methods=["GET"])
 def get_user_bookings(username):
@@ -221,3 +221,35 @@ def add_booking(username):
         return jsonify({'error': 'Error with POST request'}), 500
 
     return jsonify(booking_info)
+
+@app.route("/users/<string:username>/delete", methods=["POST"])
+def delete_booking(username):
+    attrib_list = [{'dateTimeSlot': 'S'}]
+    booking_info = getPostRequest(request, attrib_list)
+    booking_info['username'] = { 'S': username}
+
+    try:
+        dynamodb = boto3.resource('dynamodb')
+
+        future_bookings_table_ref = dynamodb.Table(future_bookings_table)
+
+        location_booking_info = {'locationId': request.json.get('locationId'), 'dateTimeSlot': request.json.get('dateTimeSlot')}
+
+        update_location_response = future_bookings_table_ref.update_item(
+            Key=location_booking_info,
+            UpdateExpression="SET bookings = bookings - :val",
+            ExpressionAttributeValues={
+                ':val': 1,
+            },
+            ReturnValues="UPDATED_NEW"
+        )
+
+        response = client.delete_item(
+            TableName=user_bookings_table,
+            Key=booking_info
+        )
+    except Exception:
+        traceback.print_exc()
+        return jsonify({'error': 'Error with POST request'}), 500
+
+    return jsonify(response)

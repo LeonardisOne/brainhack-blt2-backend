@@ -9,7 +9,6 @@ https://wrm7pj3sz1.execute-api.us-east-1.amazonaws.com/staging
 `https://wrm7pj3sz1.execute-api.us-east-1.amazonaws.com/staging/locations`
 
 - GET: Get the information about all the sports facilities in the app database
-- POST: Add a new entry about a sports facility to the database
 
 `https://wrm7pj3sz1.execute-api.us-east-1.amazonaws.com/staging/locations/<string:regionName>`
 
@@ -29,4 +28,11 @@ https://wrm7pj3sz1.execute-api.us-east-1.amazonaws.com/staging
 - POST: Add a new booking for the user at the specified location
   E.g.
 
-  `{ "username": "exampleuser", "locationId": "f70612ac60bd4503a31fd070046b607b", "dateTimeSlot": "2020-06-04 0900" }`
+  `{ "locationId": "f70612ac60bd4503a31fd070046b607b", "dateTimeSlot": "2020-06-04 0900" }`
+
+`https://wrm7pj3sz1.execute-api.us-east-1.amazonaws.com/staging/users/<string:username>/delete`
+
+- POST: Delete a booking by the user at the specified date, time and location
+  E.g.
+
+  `{ "locationId": "f70612ac60bd4503a31fd070046b607b", "dateTimeSlot": "2020-06-04 0900" }`
