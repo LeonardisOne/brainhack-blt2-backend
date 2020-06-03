@@ -3,7 +3,7 @@ import os
 import boto3
 import uuid
 
-from helper_func import formatDynamoResponse
+from helper_func import formatDynamoResponse, getPostRequest
 
 from flask import Flask, jsonify, request
 app = Flask(__name__)
@@ -18,6 +18,8 @@ attrib_list_ex_locationId = [{'name': 'S'},
     {'region': 'S'}]
 
 locations_table = os.environ['LOCATIONS_TABLE']
+future_bookings_table = os.environ['FUTURE_BOOKINGS_TABLE']
+user_bookings_table = os.environ['USER_BOOKINGS_TABLE']
 client = boto3.client('dynamodb')
 
 @app.route("/")
@@ -36,6 +38,30 @@ def get_locations_for_region(regionName):
         },
         ExpressionAttributeNames={
             '#r': 'region'
+        },
+    )
+
+    db_entries = response.get('Items')
+    
+    return_list = []
+    return_response = { 'items':return_list }
+    for entry in db_entries:
+        temp_dict = formatDynamoResponse(entry)
+        
+        return_list.append(temp_dict)
+    
+    return jsonify(return_response)
+
+@app.route("/locations/<path:regionWithLocationId>/future")
+def get_future_bookings(regionWithLocationId):
+    locationId = str(regionWithLocationId).split('/', 1)[1]
+    response = client.query(
+        TableName=future_bookings_table,
+        KeyConditionExpression='locationId = :location_id',
+        ExpressionAttributeValues={
+            ':location_id': {
+                'S': locationId,
+            },
         },
     )
 
@@ -84,12 +110,9 @@ def get_locations():
 
 @app.route("/locations", methods=["POST"])
 def create_location():
-    data_to_send = {}
+    data_to_send = getPostRequest(request, attrib_list_ex_locationId)
     
     data_to_send['locationId'] = {'S': uuid.uuid4().hex }
-    for attrib_metadata in attrib_list_ex_locationId:
-        for attrib_name, attrib_type in attrib_metadata.items():
-            data_to_send[attrib_name] = { attrib_type: request.json.get(attrib_name) }
 
     if not data_to_send['locationId']:
         return jsonify({'error': 'Please provide locationId'}), 400
@@ -100,3 +123,52 @@ def create_location():
     )
 
     return jsonify(data_to_send)
+
+@app.route("/users/<string:username>", methods=["GET"])
+def get_user_bookings(username):
+    response = client.query(
+        TableName=user_bookings_table,
+        KeyConditionExpression='username = :userName',
+        ExpressionAttributeValues={
+            ':userName': {
+                'S': username,
+            },
+        },
+    )
+
+    db_entries = response.get('Items')
+    
+    return_list = []
+    return_response = { 'items':return_list }
+    for entry in db_entries:
+        temp_dict = formatDynamoResponse(entry)
+        
+        return_list.append(temp_dict)
+    
+    return jsonify(return_response)
+
+@app.route("/users/<string:username>", methods=["POST"])
+def add_booking(username):
+    attrib_list = [{'username': 'S'}, {'dateTimeSlot': 'S'}, {'locationId': 'S'}]
+    booking_info = getPostRequest(request, attrib_list)
+
+    response = client.put_item(
+        TableName=user_bookings_table,
+        Item=booking_info
+    )
+
+    del booking_info['username']
+
+    update_location_response = client.update_item(
+        TableName=future_bookings_table,
+        Key=booking_info,
+        UpdateExpression="SET bookings = bookings + :val",
+        ExpressionAttributeValues={
+            ':val': {
+                'N': "1",
+            }
+        },
+        ReturnValues="UPDATED_NEW"
+    )
+
+    return jsonify(booking_info)
