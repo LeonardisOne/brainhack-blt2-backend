@@ -5,7 +5,9 @@ plugins:
   - serverless-wsgi
 
 custom:
-  tableName: "locations-table-${self:provider.stage}"
+  locationTable: "locations-table-${self:provider.stage}"
+  futureBookingTable: "location-future-bookings-table-${self:provider.stage}"
+  userBookingTable: "user-bookings-table-${self:provider.stage}"
   wsgi:
     app: app.app
     packRequirements: false
@@ -30,8 +32,12 @@ provider:
         - dynamodb:DeleteItem
       Resource:
         - { "Fn::GetAtt": ["LocationInfoTable", "Arn"] }
+        - { "Fn::GetAtt": ["FutureBookingsTable", "Arn"] }
+        - { "Fn::GetAtt": ["UserBookingsTable", "Arn"] }
   environment:
-    LOCATIONS_TABLE: ${self:custom.tableName}
+    LOCATIONS_TABLE: ${self:custom.locationTable}
+    FUTURE_BOOKINGS_TABLE: ${self:custom.futureBookingTable}
+    USER_BOOKINGS_TABLE: ${self:custom.userBookingTable}
 
 functions:
   app:
@@ -58,4 +64,38 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 1
           WriteCapacityUnits: 1
-        TableName: ${self:custom.tableName}
+        TableName: ${self:custom.locationTable}
+    FutureBookingsTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: dateTimeSlot
+            AttributeType: S
+          - AttributeName: locationId
+            AttributeType: S
+        KeySchema:
+          - AttributeName: locationId
+            KeyType: HASH
+          - AttributeName: dateTimeSlot
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:custom.futureBookingTable}
+    UserBookingsTable:
+      Type: "AWS::DynamoDB::Table"
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: username
+            AttributeType: S
+          - AttributeName: dateTimeSlot
+            AttributeType: S
+        KeySchema:
+          - AttributeName: username
+            KeyType: HASH
+          - AttributeName: dateTimeSlot
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:custom.userBookingTable}
